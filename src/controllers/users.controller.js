@@ -1,10 +1,8 @@
-import { UsersRepository } from '../repositories/users.repository.js';
-import { UsersService } from '../services/users.service.js';
 import { pageLinks } from '../utils/query.js';
 
 export class UsersController {
-  constructor() {
-    this.usersService = new UsersService(new UsersRepository());
+  constructor(usersService) {
+    this.usersService = usersService;
   }
 
   list = async (req, res) => {

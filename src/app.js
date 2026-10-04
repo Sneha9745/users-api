@@ -4,9 +4,10 @@ import { errorHandler } from './middleware/error-handler.js';
 import { notFoundHandler } from './middleware/not-found.js';
 import { requestId } from './middleware/request-id.js';
 import { requestLogger } from './middleware/request-logger.js';
-import { usersRouter } from './routes/users.routes.js';
+import { requireJson } from './middleware/require-json.js';
+import { createUsersRouter } from './routes/users.routes.js';
 
-export function createApp() {
+export function createApp({ usersController }) {
   const app = express();
 
   app.disable('x-powered-by');
@@ -14,12 +15,14 @@ export function createApp() {
 
   app.use(requestId);
   if (!config.isTest) app.use(requestLogger);
+  app.use(requireJson);
   app.use(express.json({ limit: config.bodyLimit }));
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', uptimeSec: Math.round(process.uptime()) });
   });
-  app.use('/api/v1/users', usersRouter);
+
+  app.use('/api/v1/users', createUsersRouter(usersController));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

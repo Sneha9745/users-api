@@ -1,66 +1,67 @@
-import { describe, expect, it } from 'vitest';
-import express from 'express';
-import request from 'supertest';
+import { describe, expect, it, vi } from 'vitest';
 import { requireJson } from '../../src/middleware/require-json.js';
 import { validateIdParam } from '../../src/middleware/validate-id.js';
 
 describe('requireJson', () => {
-  it('rejects non-JSON bodies for POST', async () => {
-    const app = express();
-    app.use(requireJson);
-    app.use(express.text());
-    app.post('/test', (req, res) => res.sendStatus(204));
-
-    const res = await request(app)
-      .post('/test')
-      .set('Content-Type', 'text/plain')
-      .send('hello');
-
-    expect(res.status).toBe(415);
+  const fakeReq = (method, isJson) => ({
+    method,
+    is: () => (isJson ? 'application/json' : false),
   });
 
-  it('allows JSON bodies for POST', async () => {
-    const app = express();
-    app.use(requireJson);
-    app.use(express.json());
-    app.post('/test', (req, res) => res.json(req.body));
+  it('lets GET through without a body', () => {
+    const next = vi.fn();
 
-    const res = await request(app)
-      .post('/test')
-      .set('Content-Type', 'application/json')
-      .send({ hello: 'world' });
+    requireJson(fakeReq('GET', false), {}, next);
 
-    expect(res.status).toBe(200);
+    expect(next).toHaveBeenCalledWith();
   });
+
+  it('lets a JSON POST through', () => {
+    const next = vi.fn();
+
+    requireJson(fakeReq('POST', true), {}, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it.each(['POST', 'PUT', 'PATCH'])(
+    'rejects a non-JSON %s with 415',
+    (method) => {
+      const next = vi.fn();
+
+      requireJson(fakeReq(method, false), {}, next);
+
+      expect(next.mock.calls[0][0]).toMatchObject({ status: 415 });
+    }
+  );
 });
 
 describe('validateIdParam', () => {
-  it('rejects an invalid UUID', () => {
-    const next = (err) => err;
-
-    const err = validateIdParam(
-      {},
-      {},
-      next,
-      'not-a-uuid'
-    );
-
-    expect(err.status).toBe(400);
-  });
-
-  it('accepts a valid UUID', () => {
-    let called = false;
-    const next = () => {
-      called = true;
-    };
+  it('accepts a UUID', () => {
+    const next = vi.fn();
 
     validateIdParam(
       {},
       {},
       next,
-      '123e4567-e89b-12d3-a456-426614174000'
+      '15cfde80-9253-4e58-a113-a87a9e67498a'
     );
 
-    expect(called).toBe(true);
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it.each([
+    '123',
+    'abc',
+    '15cfde80-9253-4e58-a113',
+  ])('rejects %s with 400', (id) => {
+    const next = vi.fn();
+
+    validateIdParam({}, {}, next, id);
+
+    expect(next.mock.calls[0][0]).toMatchObject({
+      status: 400,
+      detail: 'id must be a valid UUID',
+    });
   });
 });

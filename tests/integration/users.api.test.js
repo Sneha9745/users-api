@@ -1,64 +1,163 @@
-import { describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { createContainer } from '../../src/container.js';
 
-const fakeController = {
-  list: async (req, res) => {
-    res.json({
-      data: [],
-      meta: { page: 1, pageSize: 20, total: 0 },
-      links: {},
-    });
-  },
+const USERS = '/api/v1/users';
 
-  getById: async (req, res) => {
-    res.json({
-      data: { id: req.params.id, firstName: 'Sita' },
-    });
-  },
-
-  create: async (req, res) => {
-    res.status(201).json({
-      data: { id: '123', ...req.body },
-    });
-  },
-
-  update: async (req, res) => {
-    res.json({
-      data: { id: req.params.id, ...req.body },
-    });
-  },
-
-  remove: async (req, res) => {
-    res.status(204).end();
+const sita = {
+  firstName: 'Sita',
+  lastName: 'Gurung',
+  email: 'sita@example.com',
+  password: 'Secret123',
+  address: {
+    street: 'Lakeside Road 5',
+    city: 'Pokhara',
+    country: 'Nepal',
   },
 };
 
-const app = createApp({ usersController: fakeController });
+describe('Users API (integration)', () => {
+  let app;
+  let container;
 
-describe('Users API', () => {
-  it('returns 415 for non-JSON POST', async () => {
+  beforeEach(() => {
+    container = createContainer({
+      hashPassword: async (plain) => `fake-hash:${plain}`,
+    });
+
+    app = createApp(container);
+  });
+
+  it('POST → 201, and the injected hasher was used', async () => {
     const res = await request(app)
-      .post('/api/v1/users')
-      .set('Content-Type', 'text/plain')
-      .send('hello');
+      .post(USERS)
+      .send(sita);
 
-    expect(res.status).toBe(415);
-  });
+    expect(res.status).toBe(201);
+    expect(res.body.data).not.toHaveProperty('passwordHash');
 
-  it('returns 400 for an invalid UUID', async () => {
-    const res = await request(app).get(
-      '/api/v1/users/not-a-uuid'
+    const stored = await container.usersRepository.findById(
+      res.body.data.id
     );
 
-    expect(res.status).toBe(400);
+    expect(stored.passwordHash).toBe('fake-hash:Secret123');
   });
 
-  it('returns 200 for a valid user id', async () => {
-    const res = await request(app).get(
-      '/api/v1/users/123e4567-e89b-12d3-a456-426614174000'
+  it('each test starts with an empty store', async () => {
+    const res = await request(app).get(USERS);
+
+    expect(res.body.meta.total).toBe(0);
+  });
+
+  it('full lifecycle: create → get → patch → delete → 404', async () => {
+    const { body } = await request(app)
+      .post(USERS)
+      .send(sita);
+
+    const url = `${USERS}/${body.data.id}`;
+
+    expect((await request(app).get(url)).status).toBe(200);
+
+    expect(
+      (
+        await request(app)
+          .patch(url)
+          .send({ phone: '+977-9811111111' })
+      ).body.data.phone
+    ).toBe('+977-9811111111');
+
+    expect(
+      (await request(app).delete(url)).status
+    ).toBe(204);
+
+    expect(
+      (await request(app).get(url)).status
+    ).toBe(404);
+  });
+
+  describe('custom middleware', () => {
+    it('requireJson: form-encoded POST → 415', async () => {
+      const res = await request(app)
+        .post(USERS)
+        .type('form')
+        .send('firstName=Sita');
+
+      expect(res.status).toBe(415);
+
+      expect(
+        res.headers['content-type']
+      ).toMatch(/application\/problem\+json/);
+    });
+
+    it('validateIdParam: GET /users/123 → 400 (not 404)', async () => {
+      const res = await request(app).get(
+        `${USERS}/123`
+      );
+
+      expect(res.status).toBe(400);
+
+      expect(res.body.detail).toBe(
+        'id must be a valid UUID'
+      );
+    });
+
+    it('validateIdParam also guards PATCH and DELETE', async () => {
+      expect(
+        (
+          await request(app)
+            .patch(`${USERS}/abc`)
+            .send({ phone: '+977-9811111111' })
+        ).status
+      ).toBe(400);
+
+      expect(
+        (
+          await request(app).delete(`${USERS}/abc`)
+        ).status
+      ).toBe(400);
+    });
+
+    it('a valid but unknown UUID still reaches the service → 404', async () => {
+      const res = await request(app).get(
+        `${USERS}/15cfde80-9253-4e58-a113-a87a9e67498a`
+      );
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  it('a fake service can replace the real one entirely', async () => {
+    const fakeService = {
+      list: async () => ({
+        data: [
+          {
+            id: 'x',
+            firstName: 'Fake',
+          },
+        ],
+        meta: {
+          page: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+        },
+      }),
+    };
+
+    const fakeApp = createApp(
+      createContainer({
+        usersService: fakeService,
+      })
     );
 
-    expect(res.status).toBe(200);
+    const res = await request(fakeApp).get(USERS);
+
+    expect(res.body.data).toEqual([
+      {
+        id: 'x',
+        firstName: 'Fake',
+      },
+    ]);
   });
 });

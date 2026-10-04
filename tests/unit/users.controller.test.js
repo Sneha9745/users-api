@@ -1,71 +1,129 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UsersController } from '../../src/controllers/users.controller.js';
 
+function fakeRes() {
+  const res = {};
+  res.status = vi.fn(() => res);
+  res.location = vi.fn(() => res);
+  res.json = vi.fn(() => res);
+  res.end = vi.fn(() => res);
+  return res;
+}
+
 describe('UsersController', () => {
-  it('lists users', async () => {
-    const usersService = {
-      list: vi.fn().mockResolvedValue({
-        data: [{ id: '1', firstName: 'Sita' }],
-        meta: { page: 1, pageSize: 20, total: 1 },
-      }),
+  let service;
+  let controller;
+
+  beforeEach(() => {
+    service = {
+      list: vi.fn(),
+      getById: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      remove: vi.fn(),
     };
 
-    const controller = new UsersController(usersService);
-    const req = { query: {} };
-    const res = { json: vi.fn() };
-
-    await controller.list(req, res);
-
-    expect(usersService.list).toHaveBeenCalledWith({});
-    expect(res.json).toHaveBeenCalled();
+    controller = new UsersController(service);
   });
 
-  it('gets a user by id', async () => {
-    const usersService = {
-      getById: vi.fn().mockResolvedValue({
-        id: '123',
-        firstName: 'Sita',
-      }),
-    };
-
-    const controller = new UsersController(usersService);
-    const req = { params: { id: '123' } };
-    const res = { json: vi.fn() };
-
-    await controller.getById(req, res);
-
-    expect(usersService.getById).toHaveBeenCalledWith('123');
-    expect(res.json).toHaveBeenCalledWith({
-      data: { id: '123', firstName: 'Sita' },
+  it('create → 201 + Location + the created user', async () => {
+    service.create.mockResolvedValue({
+      id: 'u1',
+      firstName: 'Sita',
     });
-  });
 
-  it('creates a user', async () => {
-    const user = { id: '123', firstName: 'Sita' };
-
-    const usersService = {
-      create: vi.fn().mockResolvedValue(user),
-    };
-
-    const controller = new UsersController(usersService);
     const req = {
       body: { firstName: 'Sita' },
       baseUrl: '/api/v1/users',
     };
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      location: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    };
+
+    const res = fakeRes();
 
     await controller.create(req, res);
 
-    expect(usersService.create).toHaveBeenCalledWith({
+    expect(service.create).toHaveBeenCalledWith({
       firstName: 'Sita',
     });
+
     expect(res.status).toHaveBeenCalledWith(201);
+
     expect(res.location).toHaveBeenCalledWith(
-      '/api/v1/users/123'
+      '/api/v1/users/u1'
     );
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: { id: 'u1', firstName: 'Sita' },
+    });
+  });
+
+  it('getById passes the route param to the service', async () => {
+    service.getById.mockResolvedValue({
+      id: 'u1',
+    });
+
+    const res = fakeRes();
+
+    await controller.getById(
+      { params: { id: 'u1' } },
+      res
+    );
+
+    expect(service.getById).toHaveBeenCalledWith('u1');
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: { id: 'u1' },
+    });
+  });
+
+  it('remove → 204 with no body', async () => {
+    const res = fakeRes();
+
+    await controller.remove(
+      { params: { id: 'u1' } },
+      res
+    );
+
+    expect(service.remove).toHaveBeenCalledWith('u1');
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it('lets service errors propagate', async () => {
+    service.getById.mockRejectedValue(
+      Object.assign(new Error('nope'), { status: 404 })
+    );
+
+    await expect(
+      controller.getById(
+        { params: { id: 'x' } },
+        fakeRes()
+      )
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('works when a method is passed around as a plain function', async () => {
+    service.list.mockResolvedValue({
+      data: [],
+      meta: {
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 1,
+      },
+    });
+
+    const { list } = controller;
+
+    const res = fakeRes();
+
+    await list(
+      {
+        query: {},
+        originalUrl: '/api/v1/users',
+      },
+      res
+    );
+
+    expect(res.json).toHaveBeenCalled();
   });
 });

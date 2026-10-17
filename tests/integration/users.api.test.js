@@ -1,3 +1,4 @@
+
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
@@ -91,9 +92,7 @@ describe('Users API (integration)', () => {
     });
 
     it('validateIdParam: GET /users/123 → 400 (not 404)', async () => {
-      const res = await request(app).get(
-        `${USERS}/123`
-      );
+      const res = await request(app).get(`${USERS}/123`);
 
       expect(res.status).toBe(400);
 
@@ -159,5 +158,11 @@ describe('Users API (integration)', () => {
         firstName: 'Fake',
       },
     ]);
+  });
+
+  it('adds X-Response-Time header', async () => {
+    const res = await request(app).get(USERS);
+
+    expect(res.headers['x-response-time']).toBe('3.42ms');
   });
 });

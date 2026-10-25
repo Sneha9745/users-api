@@ -12,14 +12,18 @@ const withDefaults = (profile) => ({
   phone: profile.phone ?? null,
   dateOfBirth: profile.dateOfBirth ?? null,
   address: profile.address ?? null,
+  githubId: profile.githubId ?? null,
 });
 
 export const toPublicUser = ({ passwordHash, ...user }) => user;
 
+const DUMMY_HASH = await hashPassword('dummy-password-for-timing');
+
 export class UsersService {
-  constructor(usersRepository, { hash = hashPassword } = {}) {
+  constructor(usersRepository, { hash = hashPassword, verify = verifyPassword } = {}) {
     this.users = usersRepository;
     this.hash = hash;
+    this.verify = verify;
   }
 
   async list(query = {}) {
@@ -79,9 +83,10 @@ export class UsersService {
   }
 
   async verifyCredentials(email, password) {
-    const user = await this.users.findByEmail(email.toLowerCase());
+    const user = await this.users.findByEmail(email);
+    const ok = await this.verify(password, user?.passwordHash ?? DUMMY_HASH);
 
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    if (!user || !user.passwordHash || !ok) {
       throw unauthorized('Invalid email or password');
     }
 
@@ -91,53 +96,40 @@ export class UsersService {
   async changePassword(id, currentPassword, newPassword) {
     const user = await this.users.findById(id);
 
-    if (!user) throw notFound(`User ${id} does not exist`);
-
-    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    if (!user?.passwordHash || !(await this.verify(currentPassword, user.passwordHash))) {
       throw unauthorized('Current password is incorrect');
     }
 
-    const passwordHash = await this.hash(newPassword);
-    await this.users.update(id, { passwordHash });
+    await this.users.update(id, {
+      passwordHash: await this.hash(newPassword),
+    });
   }
 
   async changeRole(id, role) {
-    if (!ROLES.includes(role)) {
-      throw conflict('Invalid role');
-    }
-
-    const user = await this.users.findById(id);
-    if (!user) throw notFound(`User ${id} does not exist`);
-
+    await this.getById(id);
     return toPublicUser(await this.users.update(id, { role }));
   }
 
-  async findOrCreateFromGithub(profile) {
-    const githubId = String(profile.githubId ?? profile.id);
+  async findOrCreateFromGithub({ githubId, email, name, login }) {
+    const byGithub = await this.users.findByGithubId(githubId);
+    if (byGithub) return toPublicUser(byGithub);
 
-    const existing = await this.users.findByGithubId(githubId);
-
-    if (existing) return toPublicUser(existing);
-
-    const email = profile.email?.toLowerCase();
-
-    if (email) {
-      const existingEmail = await this.users.findByEmail(email);
-      if (existingEmail) {
-        throw conflict('This GitHub email is already registered');
-      }
+    const byEmail = await this.users.findByEmail(email);
+    if (byEmail) {
+      return toPublicUser(await this.users.update(byEmail.id, { githubId }));
     }
 
+    const [firstName, ...rest] = (name ?? login).trim().split(/\s+/);
+
     const user = await this.users.create({
-      firstName: profile.firstName ?? profile.name ?? 'GitHub',
-      lastName: profile.lastName ?? 'User',
-      email: email ?? `github-${githubId}@users-api.test`,
-      githubId,
-      phone: null,
-      dateOfBirth: null,
-      address: null,
+      ...withDefaults({
+        firstName,
+        lastName: rest.join(' '),
+        email: email.toLowerCase(),
+        githubId,
+      }),
       role: 'customer',
-      passwordHash: await this.hash(randomUUID()),
+      passwordHash: null,
     });
 
     return toPublicUser(user);

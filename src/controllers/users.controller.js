@@ -1,10 +1,9 @@
-import { UsersRepository } from '../repositories/users.repository.js';
-import { UsersService } from '../services/users.service.js';
+
 import { pageLinks } from '../utils/query.js';
 
 export class UsersController {
-  constructor() {
-    this.usersService = new UsersService(new UsersRepository());
+  constructor(usersService) {
+    this.usersService = usersService;
   }
 
   list = async (req, res) => {
@@ -23,6 +22,14 @@ export class UsersController {
 
   update = async (req, res) => {
     res.json({ data: await this.usersService.update(req.params.id, req.body) });
+  };
+
+  changeRole = async (req, res) => {
+    const user = await this.usersService.changeRole(
+      req.params.id,
+      req.body.role,
+    );
+    res.json({ data: user });
   };
 
   remove = async (req, res) => {

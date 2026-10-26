@@ -1,14 +1,55 @@
+
 import { Router } from 'express';
-import { UsersController } from '../controllers/users.controller.js';
 import { validateBody } from '../middleware/validate-body.js';
-import { createUserSchema, updateUserSchema } from '../validators/user.schema.js';
+import { validateIdParam } from '../middleware/validate-id.js';
+import {
+  createUserSchema,
+  updateUserSchema,
+} from '../validators/user.schema.js';
+import { changeRoleSchema } from '../validators/auth.schema.js';
+import { createAuthenticate } from '../middleware/authenticate.js';
+import { requirePermission, requireRole } from '../middleware/authorize.js';
 
-const controller = new UsersController();
+export function createUsersRouter({
+  usersController: controller,
+  tokenService,
+}) {
+  const router = Router();
+  const authenticate = createAuthenticate(tokenService);
 
-export const usersRouter = Router();
+  router.param('id', validateIdParam);
 
-usersRouter.get('/', controller.list);
-usersRouter.get('/:id', controller.getById);
-usersRouter.post('/', validateBody(createUserSchema), controller.create);
-usersRouter.patch('/:id', validateBody(updateUserSchema, { partial: true }), controller.update);
-usersRouter.delete('/:id', controller.remove);
+  router.post('/', validateBody(createUserSchema), controller.create);
+
+  router.use(authenticate);
+
+  router.get('/', requireRole('admin'), controller.list);
+
+  router.get(
+    '/:id',
+    requirePermission('users:read', (req) => ({ id: req.params.id })),
+    controller.getById,
+  );
+
+  router.patch(
+    '/:id',
+    requirePermission('users:update', (req) => ({ id: req.params.id })),
+    validateBody(updateUserSchema, { partial: true }),
+    controller.update,
+  );
+
+  router.patch(
+    '/:id/role',
+    requireRole('admin'),
+    validateBody(changeRoleSchema),
+    controller.changeRole,
+  );
+
+  router.delete(
+    '/:id',
+    requirePermission('users:delete', (req) => ({ id: req.params.id })),
+    controller.remove,
+  );
+
+  return router;
+}

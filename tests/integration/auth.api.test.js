@@ -187,4 +187,27 @@ describe('Auth API', () => {
       expect(res.status).toBe(401);
     });
   });
+    describe('GitHub OAuth', () => {
+    it('404 when GitHub login is not configured', async () => {
+      const res = await request(app).get(`${AUTH}/github`);
+      expect(res.status).toBe(404);
+    });
+
+    it('401 when the OAuth callback has invalid state', async () => {
+      const res = await request(app)
+        .get(`${AUTH}/github/callback`)
+        .query({ code: 'test-code', state: 'invalid-state' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('400 when the OAuth callback has no authorization code', async () => {
+      const res = await request(app)
+        .get(`${AUTH}/github/callback`)
+        .query({ state: 'test-state' })
+        .set('Cookie', 'oauth_github=%7B%22state%22%3A%22test-state%22%2C%22verifier%22%3A%22test-verifier%22%7D');
+
+      expect(res.status).toBe(400);
+    });
+  });
 });

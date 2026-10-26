@@ -24,8 +24,7 @@ export function createAuthRouter({ authController: c, authenticate }) {
   router.post('/login', loginLimiter, validateBody(loginSchema), c.login);
   router.post('/refresh', c.refresh);
   router.post('/logout', c.logout);
-  router.get('/github', c.githubStart);
-  router.get('/github/callback', c.githubCallback);
+  router.get('/github', c.githubStart); router.get('/github/callback', c.githubCallback);
 
   // Logged-in users
   router.get('/me', authenticate, c.me);

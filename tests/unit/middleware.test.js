@@ -3,6 +3,7 @@ import { requireJson } from '../../src/middleware/require-json.js';
 import { validateIdParam } from '../../src/middleware/validate-id.js';
 
 describe('requireJson', () => {
+  
   const fakeReq = (method, isJson) => ({
     method,
     is: () => (isJson ? 'application/json' : false),

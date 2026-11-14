@@ -1,30 +1,30 @@
-# Security Report — users-api
+# Security Report – users-api
 
-## Overview
+## OWASP Top 10 Security Analysis
 
-This report describes the security controls implemented in the users-api project for Assignment 2.5. The API uses request validation, security headers, an origin allow-list, CSRF protection and rate limiting, alongside authentication and authorization controls.
-
-## OWASP Top 10 (2021)
-
-| Category | Defence in users-api |
+| OWASP Category | Security Defense in users-api |
 |---|---|
-| A01: Broken Access Control | Authentication middleware protects private routes, while role-based and attribute-based authorization policies restrict access to protected operations. |
-| A02: Cryptographic Failures | Passwords are hashed using scrypt with salt, JWTs are signed, and Helmet enables HTTP Strict Transport Security (HSTS) when served over HTTPS. |
-| A03: Injection | Strict Zod schemas validate request bodies, reject unexpected fields and constrain input values such as names. |
-| A04: Insecure Design | Login and API rate limits reduce automated abuse. Refresh-token reuse detection provides an additional safeguard. |
-| A05: Security Misconfiguration | Helmet sets security headers, CORS uses an origin allow-list, and origin verification protects cookie-based refresh and logout requests. |
-| A06: Vulnerable and Outdated Components | Dependencies are recorded in the lock file, npm audit checks known vulnerabilities, and GitHub Dependabot alerts and security updates are enabled. |
-| A07: Identification and Authentication Failures | Password validation, JWT authentication, generic login failure responses and authentication rate limiting help protect user accounts. |
-| A08: Software and Data Integrity Failures | JWT signature verification and algorithm restrictions help prevent token tampering. npm ci installs dependency versions recorded in the lock file. |
-| A09: Security Logging and Monitoring Failures | Request IDs and application response-time logging help trace requests. Centralized security monitoring and alerting are not yet implemented. |
-| A10: Server-Side Request Forgery (SSRF) | The API does not fetch arbitrary user-supplied URLs. GitHub OAuth endpoints are configured by the application, and upload storage keys are managed by the application. |
+| A01: Broken Access Control | Role-based authorization middleware restricts access to protected resources and prevents unauthorized actions. |
+| A02: Cryptographic Failures | Passwords are hashed using scrypt, and JWT secrets are stored in environment variables. |
+| A03: Injection | Input validation and controlled data access help reduce injection risks. |
+| A04: Insecure Design | Authentication, authorization, validation, and rate limiting help reduce security risks. |
+| A05: Security Misconfiguration | Environment variables and security middleware help protect application configuration. |
+| A06: Vulnerable and Outdated Components | npm audit can identify vulnerable dependencies, allowing them to be reviewed and updated. |
+| A07: Identification and Authentication Failures | Password hashing, JWT authentication, refresh tokens, and rate limiting help protect user accounts. |
+| A08: Software and Data Integrity Failures | Input validation and controlled dependency management help protect application and data integrity. |
+| A09: Security Logging and Monitoring Failures | Errors can be monitored, but centralized security logging and alerting are not fully implemented yet. |
+| A10: Server-Side Request Forgery (SSRF) | The API does not currently provide arbitrary URL-fetching functionality, so SSRF exposure is limited. |
 
-## Remaining Weakness and Proposed Fix
+## Remaining Security Weakness
 
-A remaining weakness is that rate-limit counters are stored in the API process. If the application runs as multiple instances, each instance may maintain a separate counter. This could allow an attacker to distribute requests across instances.
+One remaining weakness is that rate-limit counters are stored in application memory.
 
-**Proposed fix:** Use a shared Redis-backed rate-limit store, such as rate-limit-redis, so all API instances use the same counters. This would make rate limiting more consistent when the API is scaled horizontally.
+When the API runs on multiple server instances, each instance maintains separate counters. An attacker may bypass the intended rate limits by sending requests to different instances.
+
+## Proposed Solution
+
+I would use Redis as centralized rate-limit storage. All application instances would share the same counters through Redis. This would provide consistent rate limiting across servers and make brute-force attacks more difficult.
 
 ## Conclusion
 
-The project applies several layers of security, including strict input validation, authentication and authorization, secure HTTP headers, origin checks, rate limiting and dependency auditing. Regular testing, dependency updates and security reviews should continue to improve the API's protection.
+The users-api implements important security measures, including password hashing, JWT authentication, role-based authorization, input validation, and rate limiting. However, centralized rate limiting and comprehensive security logging would further improve its security.

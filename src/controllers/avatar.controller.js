@@ -1,3 +1,4 @@
+
 import { badRequest } from '../utils/http-error.js';
 
 export class AvatarController {

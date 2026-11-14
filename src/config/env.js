@@ -1,5 +1,4 @@
-
- // Central place for configuration. Every other file imports `config` instead of reading process.env.
+// Central place for configuration. Every other file imports `config` instead of reading process.env.
 
 const toInt = (value, fallback) => {
   const n = Number.parseInt(value, 10);
@@ -22,33 +21,46 @@ export const config = Object.freeze({
 
   auth: {
     jwtSecret,
-    accessTokenTtlSeconds: toInt(process.env.ACCESS_TOKEN_TTL_SECONDS, 15 * 60),
+    accessTokenTtlSeconds: toInt(process.env.ACCESS_TOKEN_TTL_SECONDS, 15 * 60), // 15 minutes
     refreshTokenTtlDays: toInt(process.env.REFRESH_TOKEN_TTL_DAYS, 7),
     issuer: 'users-api',
     audience: 'users-api',
   },
 
+  // First admin account, created at startup if it doesn't exist yet.
   admin: {
     email: process.env.ADMIN_EMAIL,
     password: process.env.ADMIN_PASSWORD,
   },
 
-  // Assignment 2.4: file upload configuration
+  // ── New in 2.4: file uploads ──
   uploads: {
-    driver: process.env.STORAGE_DRIVER ?? 'local',
+    driver: process.env.STORAGE_DRIVER ?? 'local', // 'local' (disk) or 's3'
     localDir: process.env.UPLOADS_DIR ?? 'uploads',
     publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000',
-    maxBytes: toInt(process.env.UPLOAD_MAX_BYTES, 5 * 1024 * 1024),
+    maxBytes: toInt(process.env.UPLOAD_MAX_BYTES, 5 * 1024 * 1024), // 5 MB
   },
 
-  // Assignment 2.4: S3 storage configuration
   s3: {
     region: process.env.S3_REGION ?? 'us-east-1',
     bucket: process.env.S3_BUCKET,
-    endpoint: process.env.S3_ENDPOINT,
-    publicUrl: process.env.S3_PUBLIC_URL,
+    endpoint: process.env.S3_ENDPOINT, // set for MinIO / Cloudflare R2; leave empty for AWS
+    publicUrl: process.env.S3_PUBLIC_URL, // e.g. https://my-bucket.s3.us-east-1.amazonaws.com
     accessKeyId: process.env.S3_ACCESS_KEY_ID,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  },
+
+  // ── New in 2.5: security ──
+  security: {
+    // Browser origins allowed to call the API (CORS) and to use the refresh cookie (CSRF check).
+    corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+    // Whole API: 300 requests / 15 min per IP.
+    apiRateLimit: { windowMs: 15 * 60 * 1000, limit: toInt(process.env.RATE_LIMIT_MAX, 300) },
+    // Login/register: 5 FAILED attempts / 15 min per IP + email (brute-force protection).
+    authRateLimit: { windowMs: 15 * 60 * 1000, limit: toInt(process.env.AUTH_RATE_LIMIT_MAX, 5) },
   },
 
   github: {

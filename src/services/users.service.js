@@ -13,6 +13,7 @@ const withDefaults = (profile) => ({
   dateOfBirth: profile.dateOfBirth ?? null,
   address: profile.address ?? null,
   githubId: profile.githubId ?? null,
+  avatar: profile.avatar ?? null,
 });
 
 export const toPublicUser = ({ passwordHash, ...user }) => user;
@@ -133,6 +134,11 @@ export class UsersService {
     });
 
     return toPublicUser(user);
+  }
+
+  async setAvatar(id, avatar) {
+    await this.getById(id);
+    return toPublicUser(await this.users.update(id, { avatar }));
   }
 
   async #assertEmailAvailable(email, exceptId) {

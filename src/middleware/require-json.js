@@ -1,4 +1,3 @@
-
 import { HttpError } from '../utils/http-error.js';
 
 const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH']);
@@ -16,7 +15,8 @@ export function requireJson(req, res, next) {
   if (
     METHODS_WITH_BODY.has(req.method) &&
     hasBody(req) &&
-    !req.is('application/json')
+    !req.is('application/json') &&
+    !req.is('multipart/form-data')
   ) {
     return next(
       new HttpError(
